@@ -1,0 +1,13 @@
+{
+  "name": "bet-tracker-pro",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "build": "babel --presets @babel/preset-react app.js -o app.compiled.js"
+  },
+  "devDependencies": {
+    "@babel/cli": "^7.24.0",
+    "@babel/core": "^7.24.0",
+    "@babel/preset-react": "^7.24.0"
+  }
+}
