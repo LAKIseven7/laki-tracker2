@@ -16,22 +16,22 @@ const { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContain
 
 // ======== CONSTANTS ========
 const DEFAULT_BOOKMAKERS = [
-  { id: '1', name: 'Betclic', tax: 0, count: 0 },
-  { id: '2', name: 'STS', tax: 12, count: 0 },
-  { id: '3', name: 'Fortuna', tax: 12, count: 0 },
-  { id: '4', name: 'Superbet', tax: 12, count: 0 },
+  { id: '1', name: 'Betclic', tax: 0, count: 0, logoText: 'BC', color: '#3b82f6' },
+  { id: '2', name: 'STS', tax: 12, count: 0, logoText: 'STS', color: '#22c55e' },
+  { id: '3', name: 'Fortuna', tax: 12, count: 0, logoText: 'FO', color: '#f59e0b' },
+  { id: '4', name: 'Superbet', tax: 12, count: 0, logoText: 'SB', color: '#ef4444' },
 ];
 
 const DEFAULT_SPORTS = [
-  { name: 'Piłka nożna', count: 0 },
-  { name: 'Tenis', count: 0 },
-  { name: 'Siatkówka', count: 0 },
-  { name: 'Piłka ręczna', count: 0 },
-  { name: 'Koszykówka', count: 0 },
-  { name: 'Hokej', count: 0 },
-  { name: 'E-sport', count: 0 },
-  { name: 'Dart', count: 0 },
-  { name: 'Inne', count: 0 },
+  { name: 'Piłka nożna', count: 0, emoji: '⚽️' },
+  { name: 'Tenis', count: 0, emoji: '🎾' },
+  { name: 'Siatkówka', count: 0, emoji: '🏐' },
+  { name: 'Piłka ręczna', count: 0, emoji: '🤾' },
+  { name: 'Koszykówka', count: 0, emoji: '🏀' },
+  { name: 'Hokej', count: 0, emoji: '🏒' },
+  { name: 'E-sport', count: 0, emoji: '🎮' },
+  { name: 'Dart', count: 0, emoji: '🎯' },
+  { name: 'Inne', count: 0, emoji: '✨' },
 ];
 
 const STATUSES = [
@@ -58,6 +58,7 @@ const STATS_TIME_RANGES = [
 ];
 
 const CHART_COLORS = ['#3b82f6', '#8b5cf6', '#06b6d4', '#10b981', '#f59e0b', '#ef4444', '#ec4899', '#6366f1', '#14b8a6'];
+const BOOKMAKER_COLORS = ['#3b82f6', '#22c55e', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4', '#ec4899', '#14b8a6'];
 
 // ======== SVG ICONS ========
 function IconDashboard({ size = 20 }) {
@@ -134,6 +135,94 @@ function IconCopy({ size = 16 }) {
 }
 
 // ======== HELPERS ========
+const FALLBACK_LOGO = 'BK';
+const FALLBACK_SPORT_EMOJI = '⚽️';
+const FALLBACK_BOOKMAKER_COLOR = '#3b82f6';
+
+function toDateInputValue(timestamp) {
+  if (!timestamp) return '';
+  const d = new Date(timestamp);
+  const local = new Date(d.getTime() - d.getTimezoneOffset() * 60000);
+  return local.toISOString().split('T')[0];
+}
+
+function fromDateInputValue(value) {
+  if (!value) return Date.now();
+  return new Date(value + 'T12:00:00').getTime();
+}
+
+function normalizeLogoText(value) {
+  if (!value) return FALLBACK_LOGO;
+  return value.replace(/\s+/g, '').substring(0, 3).toUpperCase();
+}
+
+function hexToRgba(hex, alpha) {
+  if (!hex) return `rgba(59,130,246,${alpha})`;
+  const raw = hex.replace('#', '');
+  const full = raw.length === 3 ? raw.split('').map(c => c + c).join('') : raw;
+  const int = parseInt(full, 16);
+  const r = (int >> 16) & 255;
+  const g = (int >> 8) & 255;
+  const b = int & 255;
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
+function getBookmakerColor(bk) {
+  return bk?.color || FALLBACK_BOOKMAKER_COLOR;
+}
+
+function getBookmakerLogo(bk) {
+  return normalizeLogoText(bk?.logoText || bk?.name || FALLBACK_LOGO);
+}
+
+function getSportEmoji(sport) {
+  return sport?.emoji || FALLBACK_SPORT_EMOJI;
+}
+
+function normalizeBookmakerName(name) {
+  return (name || '').toString().trim().replace(/\s+/g, '').toLowerCase();
+}
+
+function findBookmaker(bookmakers, coupon) {
+  if (!bookmakers || bookmakers.length === 0 || !coupon) return null;
+  if (coupon.bookmakerId) {
+    const byId = bookmakers.find(b => b.id === coupon.bookmakerId);
+    if (byId) return byId;
+  }
+  const target = normalizeBookmakerName(coupon.bookmaker);
+  if (!target) return null;
+  return bookmakers.find(b => normalizeBookmakerName(b.name) === target) || null;
+}
+
+let audioCtx;
+function playTone(freq, duration = 80, volume = 0.06) {
+  try {
+    const AudioContext = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContext) return;
+    if (!audioCtx) audioCtx = new AudioContext();
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = 'sine';
+    osc.frequency.value = freq;
+    gain.gain.value = volume;
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    osc.start();
+    osc.stop(audioCtx.currentTime + duration / 1000);
+  } catch (err) {
+    console.warn('Audio error:', err);
+  }
+}
+
+function triggerFeedback(type = 'tap') {
+  if (type === 'success') playTone(880, 90, 0.07);
+  else if (type === 'warn') playTone(520, 110, 0.05);
+  else playTone(720, 60, 0.05);
+  if (navigator.vibrate) {
+    navigator.vibrate(type === 'success' ? [20, 30, 20] : [12]);
+  }
+}
 function filterByTimeRange(coupons, range) {
   const now = new Date();
   return coupons.filter(c => {
@@ -434,9 +523,11 @@ function AuthScreen({ onAuth }) {
     setError(null);
     try {
       await auth.signInWithEmailAndPassword(email.trim(), password);
+      triggerFeedback('success');
     } catch (err) {
       console.error('Login error:', err);
       setError(err);
+      triggerFeedback('warn');
     } finally {
       setLoading(false);
     }
@@ -456,9 +547,11 @@ function AuthScreen({ onAuth }) {
     setError(null);
     try {
       await auth.createUserWithEmailAndPassword(email.trim(), password);
+      triggerFeedback('success');
     } catch (err) {
       console.error('Register error:', err);
       setError(err);
+      triggerFeedback('warn');
     } finally {
       setLoading(false);
     }
@@ -474,9 +567,11 @@ function AuthScreen({ onAuth }) {
     try {
       await auth.sendPasswordResetEmail(email.trim());
       setResetSent(true);
+      triggerFeedback('success');
     } catch (err) {
       console.error('Reset error:', err);
       setError(err);
+      triggerFeedback('warn');
     } finally {
       setLoading(false);
     }
@@ -496,8 +591,12 @@ function AuthScreen({ onAuth }) {
       <div style={{ width: '100%', maxWidth: 400, position: 'relative', zIndex: 10 }}>
         {/* Logo */}
         <div style={{ textAlign: 'center', marginBottom: 40 }}>
-          <h1 style={{ fontSize: 32, fontWeight: 900, fontStyle: 'italic', letterSpacing: '-0.05em', background: 'linear-gradient(135deg, #3b82f6, #8b5cf6)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', marginBottom: 4 }}>BET TRACKER</h1>
-          <p style={{ fontSize: 9, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.3em', color: '#475569' }}>Panel zakładów</p>
+          <h1 className="brand-title large" style={{ justifyContent: 'center', marginBottom: 6 }}>
+            <span className="brand-main">bet</span>
+            <span className="brand-accent">tracker</span>
+          </h1>
+          <p className="brand-subtitle" style={{ marginBottom: 4 }}>by lakiseven</p>
+          <p className="brand-caption">Panel zakładów</p>
         </div>
 
         {/* Auth Card */}
@@ -527,20 +626,21 @@ function AuthScreen({ onAuth }) {
             </div>
           )}
 
-          <form onSubmit={handleSubmit}>
+          <form onSubmit={handleSubmit} autoComplete="on">
             {/* Email */}
             <div style={{ marginBottom: 14 }}>
               <label style={{ fontSize: 9, fontWeight: 800, textTransform: 'uppercase', color: '#64748b', marginBottom: 6, display: 'block', letterSpacing: '0.1em' }}>E-mail</label>
               <div style={{ position: 'relative' }}>
                 <div style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#475569' }}><IconMail size={16} /></div>
                 <input
+                  name="email"
                   type="email"
                   value={email}
                   onChange={e => setEmail(e.target.value)}
                   placeholder="twoj@email.com"
                   className="glass-input"
                   style={{ width: '100%', padding: '12px 12px 12px 38px', borderRadius: 14, fontSize: 13 }}
-                  autoComplete="email"
+                  autoComplete="username"
                 />
               </div>
             </div>
@@ -552,6 +652,7 @@ function AuthScreen({ onAuth }) {
                 <div style={{ position: 'relative' }}>
                   <div style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#475569' }}><IconLock size={16} /></div>
                   <input
+                    name="password"
                     type={showPassword ? 'text' : 'password'}
                     value={password}
                     onChange={e => setPassword(e.target.value)}
@@ -560,7 +661,7 @@ function AuthScreen({ onAuth }) {
                     style={{ width: '100%', padding: '12px 42px 12px 38px', borderRadius: 14, fontSize: 13 }}
                     autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
                   />
-                  <button type="button" onClick={() => setShowPassword(!showPassword)} style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: '#475569', cursor: 'pointer', padding: 2 }}>
+                  <button type="button" onClick={() => { triggerFeedback('tap'); setShowPassword(!showPassword); }} style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: '#475569', cursor: 'pointer', padding: 2 }}>
                     {showPassword ? <IconEyeOff size={16} /> : <IconEye size={16} />}
                   </button>
                 </div>
@@ -574,6 +675,7 @@ function AuthScreen({ onAuth }) {
                 <div style={{ position: 'relative' }}>
                   <div style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#475569' }}><IconLock size={16} /></div>
                   <input
+                    name="confirm-password"
                     type={showPassword ? 'text' : 'password'}
                     value={confirmPassword}
                     onChange={e => setConfirmPassword(e.target.value)}
@@ -589,7 +691,7 @@ function AuthScreen({ onAuth }) {
             {/* Forgot password link (login mode) */}
             {mode === 'login' && (
               <div style={{ textAlign: 'right', marginBottom: 16 }}>
-                <button type="button" onClick={() => { setMode('reset'); setError(null); setResetSent(false); }} style={{ background: 'none', border: 'none', color: '#60a5fa', fontSize: 11, fontWeight: 700, cursor: 'pointer', padding: 0 }}>
+                <button type="button" onClick={() => { triggerFeedback('tap'); setMode('reset'); setError(null); setResetSent(false); }} style={{ background: 'none', border: 'none', color: '#60a5fa', fontSize: 11, fontWeight: 700, cursor: 'pointer', padding: 0 }}>
                   Zapomniałeś hasła?
                 </button>
               </div>
@@ -613,18 +715,18 @@ function AuthScreen({ onAuth }) {
             {mode === 'login' && (
               <p style={{ fontSize: 12, color: '#64748b' }}>
                 Nie masz konta?{' '}
-                <button type="button" onClick={() => { setMode('register'); setError(null); }} style={{ background: 'none', border: 'none', color: '#60a5fa', fontWeight: 800, cursor: 'pointer', fontSize: 12, padding: 0 }}>Zarejestruj się</button>
+                <button type="button" onClick={() => { triggerFeedback('tap'); setMode('register'); setError(null); }} style={{ background: 'none', border: 'none', color: '#60a5fa', fontWeight: 800, cursor: 'pointer', fontSize: 12, padding: 0 }}>Zarejestruj się</button>
               </p>
             )}
             {mode === 'register' && (
               <p style={{ fontSize: 12, color: '#64748b' }}>
                 Masz już konto?{' '}
-                <button type="button" onClick={() => { setMode('login'); setError(null); }} style={{ background: 'none', border: 'none', color: '#60a5fa', fontWeight: 800, cursor: 'pointer', fontSize: 12, padding: 0 }}>Zaloguj się</button>
+                <button type="button" onClick={() => { triggerFeedback('tap'); setMode('login'); setError(null); }} style={{ background: 'none', border: 'none', color: '#60a5fa', fontWeight: 800, cursor: 'pointer', fontSize: 12, padding: 0 }}>Zaloguj się</button>
               </p>
             )}
             {mode === 'reset' && (
               <p style={{ fontSize: 12, color: '#64748b' }}>
-                <button type="button" onClick={() => { setMode('login'); setError(null); setResetSent(false); }} style={{ background: 'none', border: 'none', color: '#60a5fa', fontWeight: 800, cursor: 'pointer', fontSize: 12, padding: 0 }}>Wróć do logowania</button>
+                <button type="button" onClick={() => { triggerFeedback('tap'); setMode('login'); setError(null); setResetSent(false); }} style={{ background: 'none', border: 'none', color: '#60a5fa', fontWeight: 800, cursor: 'pointer', fontSize: 12, padding: 0 }}>Wróć do logowania</button>
               </p>
             )}
           </div>
@@ -655,6 +757,9 @@ function App() {
 
   // Auth
   useEffect(() => {
+    auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL).catch((err) => {
+      console.warn('Auth persistence error:', err);
+    });
     const unsub = auth.onAuthStateChanged((u) => {
       setUser(u);
       setLoading(false);
@@ -670,6 +775,7 @@ function App() {
       setBookmakers(DEFAULT_BOOKMAKERS);
       setSports(DEFAULT_SPORTS);
       setActiveTab('dashboard');
+      triggerFeedback('success');
     } catch (err) {
       console.error('Logout error:', err);
       alert('Błąd wylogowania: ' + err.message);
@@ -706,6 +812,69 @@ function App() {
 
   const dashboardStats = useMemo(() => calculateStats(timeRange, coupons), [coupons, timeRange]);
   const detailedStats = useMemo(() => calculateStats(statsTimeRange, coupons), [coupons, statsTimeRange]);
+  const bookmakerUsage = useMemo(() => {
+    const counts = {};
+    coupons.forEach(c => {
+      const bk = findBookmaker(bookmakers, c);
+      if (bk?.id) {
+        counts[bk.id] = (counts[bk.id] || 0) + 1;
+        return;
+      }
+      if (!c.bookmaker) return;
+      const fallbackKey = normalizeBookmakerName(c.bookmaker);
+      if (!fallbackKey) return;
+      counts[fallbackKey] = (counts[fallbackKey] || 0) + 1;
+    });
+    return counts;
+  }, [coupons, bookmakers]);
+
+  const sportsUsage = useMemo(() => {
+    const counts = {};
+    coupons.forEach(c => {
+      if (!c.sport) return;
+      const key = (c.sport || '').toString().trim().toLowerCase();
+      if (!key) return;
+      counts[key] = (counts[key] || 0) + 1;
+    });
+    return counts;
+  }, [coupons]);
+
+  const orderedBookmakers = useMemo(() => {
+    return [...bookmakers].sort((a, b) => {
+      const countA = bookmakerUsage[a.id] ?? bookmakerUsage[normalizeBookmakerName(a.name)] ?? 0;
+      const countB = bookmakerUsage[b.id] ?? bookmakerUsage[normalizeBookmakerName(b.name)] ?? 0;
+      const countDiff = countB - countA;
+      if (countDiff !== 0) return countDiff;
+      return a.name.localeCompare(b.name, 'pl');
+    });
+  }, [bookmakers, bookmakerUsage]);
+
+  const orderedSports = useMemo(() => {
+    return [...sports].sort((a, b) => {
+      const keyA = (a.name || '').toString().trim().toLowerCase();
+      const keyB = (b.name || '').toString().trim().toLowerCase();
+      const countDiff = (sportsUsage[keyB] || 0) - (sportsUsage[keyA] || 0);
+      if (countDiff !== 0) return countDiff;
+      return a.name.localeCompare(b.name, 'pl');
+    });
+  }, [sports, sportsUsage]);
+
+  useEffect(() => {
+    if (!user || !bookmakers.length || !coupons.length) return;
+    const ref = db.collection("users").doc(user.uid).collection("coupons");
+    const updates = coupons
+      .filter(c => !c.bookmakerId && c.bookmaker)
+      .map(c => {
+        const bk = findBookmaker(bookmakers, c);
+        if (!bk) return null;
+        return { id: c.id, data: { bookmakerId: bk.id, bookmakerLogoText: bk.logoText || '', bookmakerColor: bk.color || FALLBACK_BOOKMAKER_COLOR } };
+      })
+      .filter(Boolean);
+    if (updates.length === 0) return;
+    const batch = db.batch();
+    updates.forEach(u => batch.update(ref.doc(u.id), u.data));
+    batch.commit().catch(err => console.warn('Coupon bookmaker sync error:', err));
+  }, [user, bookmakers, coupons]);
 
   // Actions
   const saveCoupon = async (data) => {
@@ -718,16 +887,19 @@ function App() {
     }
     setIsModalOpen(false);
     setEditingCoupon(null);
+    triggerFeedback('success');
   };
 
   const deleteCoupon = async (id) => {
     if (!user || !window.confirm("Na pewno usunąć ten kupon?")) return;
     await db.collection("users").doc(user.uid).collection("coupons").doc(id).delete();
+    triggerFeedback('warn');
   };
 
   const updateStatus = async (id, status, extra = {}) => {
     if (!user) return;
     await db.collection("users").doc(user.uid).collection("coupons").doc(id).update({ status, ...extra });
+    triggerFeedback('success');
   };
 
   const saveBookmakers = async (list) => {
@@ -746,12 +918,14 @@ function App() {
     setEditingCoupon(null);
     setModalMode('add');
     setIsModalOpen(true);
+    triggerFeedback('tap');
   };
 
   const openEditModal = (coupon) => {
     setEditingCoupon(coupon);
     setModalMode('edit');
     setIsModalOpen(true);
+    triggerFeedback('tap');
   };
 
   if (loading) return (
@@ -768,10 +942,13 @@ function App() {
       <div className="bg-glow"></div>
 
       {/* Header */}
-      <header className="glass" style={{ position: 'sticky', top: 0, zIndex: 40, padding: '16px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <header className="glass header-bar" style={{ position: 'sticky', top: 0, zIndex: 40, padding: '16px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', maxWidth: 480, margin: '0 auto' }}>
         <div>
-          <h1 style={{ fontSize: 22, fontWeight: 900, fontStyle: 'italic', letterSpacing: '-0.05em', background: 'linear-gradient(135deg, #3b82f6, #8b5cf6)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>BET TRACKER</h1>
-          <p style={{ fontSize: 8, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.2em', color: '#475569' }}>Panel zakładów</p>
+          <h1 className="brand-title small">
+            <span className="brand-main">bet</span>
+            <span className="brand-accent">tracker</span>
+          </h1>
+          <p className="brand-subtitle" style={{ letterSpacing: '0.22em', marginTop: 2 }}>by lakiseven</p>
         </div>
         <button onClick={openAddModal} className="btn-press" style={{ width: 44, height: 44, borderRadius: 14, background: 'linear-gradient(135deg, #3b82f6, #6366f1)', border: 'none', color: 'white', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 15px rgba(59,130,246,0.3)' }}>
           <IconPlus size={20} />
@@ -813,6 +990,7 @@ function App() {
             statsTimeRange={statsTimeRange}
             setStatsTimeRange={setStatsTimeRange}
             coupons={coupons}
+            sports={sports}
           />
         )}
 
@@ -843,10 +1021,10 @@ function App() {
         <CouponModal
           mode={modalMode}
           coupon={editingCoupon}
-          onClose={() => { setIsModalOpen(false); setEditingCoupon(null); }}
+          onClose={() => { setIsModalOpen(false); setEditingCoupon(null); triggerFeedback('tap'); }}
           onSave={saveCoupon}
-          bookmakers={[...bookmakers].sort((a,b) => (b.count || 0) - (a.count || 0))}
-          sports={[...sports].sort((a,b) => (b.count || 0) - (a.count || 0))}
+          bookmakers={orderedBookmakers}
+          sports={orderedSports}
         />
       )}
     </div>
@@ -855,8 +1033,12 @@ function App() {
 
 // ======== NAV BUTTON ========
 function NavBtn({ active, onClick, icon, label }) {
+  const handleClick = () => {
+    triggerFeedback('tap');
+    onClick();
+  };
   return (
-    <button onClick={onClick} className="btn-press" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, background: 'none', border: 'none', cursor: 'pointer', color: active ? '#3b82f6' : '#475569', transition: 'all 0.2s', transform: active ? 'scale(1.05)' : 'scale(1)', padding: '6px 12px' }}>
+    <button onClick={handleClick} className="btn-press" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, background: 'none', border: 'none', cursor: 'pointer', color: active ? '#3b82f6' : '#475569', transition: 'all 0.2s', transform: active ? 'scale(1.05)' : 'scale(1)', padding: '6px 12px' }}>
       <div style={{ padding: active ? 6 : 0, borderRadius: 10, background: active ? 'rgba(59,130,246,0.1)' : 'transparent', transition: 'all 0.2s' }}>{icon}</div>
       <span style={{ fontSize: 9, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '-0.02em' }}>{label}</span>
     </button>
@@ -868,7 +1050,7 @@ function RangeSwitcher({ ranges, active, onSelect }) {
   return (
     <div className="glass" style={{ display: 'flex', padding: 4, borderRadius: 16, marginBottom: 16 }}>
       {ranges.map(r => (
-        <button key={r.id} onClick={() => onSelect(r.id)} className={`range-btn ${active === r.id ? 'active' : ''}`}>{r.label}</button>
+        <button key={r.id} onClick={() => { triggerFeedback('tap'); onSelect(r.id); }} className={`range-btn ${active === r.id ? 'active' : ''}`}>{r.label}</button>
       ))}
     </div>
   );
@@ -921,7 +1103,9 @@ function DashboardTab({ stats, timeRange, setTimeRange, coupons, bookmakers, onU
 
 // ======== ACTIVE COUPON CARD ========
 function ActiveCouponCard({ coupon, bookmakers, onUpdateStatus, onEdit, onDelete }) {
-  const bk = bookmakers.find(b => b.name === coupon.bookmaker);
+  const bk = findBookmaker(bookmakers, coupon);
+  const bkColor = bk ? getBookmakerColor(bk) : (coupon.bookmakerColor || FALLBACK_BOOKMAKER_COLOR);
+  const logoText = bk ? getBookmakerLogo(bk) : normalizeLogoText(coupon.bookmakerLogoText || coupon.bookmaker || FALLBACK_LOGO);
   const win = (Number(coupon.stake) * Number(coupon.odds) * (1 - (Number(coupon.tax || 0)/100))).toFixed(2);
   const [showActions, setShowActions] = useState(false);
 
@@ -930,8 +1114,8 @@ function ActiveCouponCard({ coupon, bookmakers, onUpdateStatus, onEdit, onDelete
       <div style={{ padding: '18px 20px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <div style={{ width: 40, height: 40, borderRadius: 12, background: 'linear-gradient(135deg, rgba(59,130,246,0.2), rgba(99,102,241,0.2))', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 900, color: '#60a5fa', border: '1px solid rgba(59,130,246,0.2)' }}>
-              {(bk?.name || 'B').substring(0, 2).toUpperCase()}
+            <div style={{ width: 40, height: 40, borderRadius: 12, background: `linear-gradient(135deg, ${hexToRgba(bkColor, 0.25)}, ${hexToRgba(bkColor, 0.1)})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 900, color: bkColor, border: `1px solid ${hexToRgba(bkColor, 0.4)}` }}>
+              {logoText}
             </div>
             <div>
               <p style={{ fontWeight: 800, fontSize: 13 }}>{coupon.sport || 'Zakład'}</p>
@@ -1023,7 +1207,9 @@ function HistoryTab({ coupons, bookmakers, onUpdateStatus, onEdit, onDelete }) {
 // ======== HISTORY COUPON CARD ========
 function HistoryCouponCard({ coupon, bookmakers, onEdit, onDelete }) {
   const status = STATUSES.find(s => s.id === coupon.status) || STATUSES[0];
-  const bk = bookmakers.find(b => b.name === coupon.bookmaker);
+  const bk = findBookmaker(bookmakers, coupon);
+  const bkColor = bk ? getBookmakerColor(bk) : (coupon.bookmakerColor || FALLBACK_BOOKMAKER_COLOR);
+  const logoText = bk ? getBookmakerLogo(bk) : normalizeLogoText(coupon.bookmakerLogoText || coupon.bookmaker || FALLBACK_LOGO);
   const win = (Number(coupon.stake) * Number(coupon.odds) * (1 - (Number(coupon.tax || 0)/100))).toFixed(2);
 
   const borderColor = coupon.status === 'won' ? '#4ade80' : coupon.status === 'lost' ? '#f87171' : coupon.status === 'cashout' ? '#60a5fa' : coupon.status === 'returned' ? '#94a3b8' : '#facc15';
@@ -1032,8 +1218,8 @@ function HistoryCouponCard({ coupon, bookmakers, onEdit, onDelete }) {
     <div className="glass" style={{ borderRadius: 16, padding: '16px 18px', marginBottom: 8, borderLeft: `3px solid ${borderColor}` }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <div style={{ width: 34, height: 34, borderRadius: 10, background: `rgba(${coupon.status === 'won' ? '74,222,128' : coupon.status === 'lost' ? '248,113,113' : '59,130,246'},0.1)`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontWeight: 900, color: borderColor }}>
-            {(bk?.name || 'B').substring(0, 2).toUpperCase()}
+          <div style={{ width: 34, height: 34, borderRadius: 10, background: hexToRgba(bkColor, 0.16), display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontWeight: 900, color: bkColor, border: `1px solid ${hexToRgba(bkColor, 0.35)}` }}>
+            {logoText}
           </div>
           <div>
             <p style={{ fontWeight: 800, fontSize: 12 }}>{coupon.sport || 'Zakład'}</p>
@@ -1073,7 +1259,7 @@ function HistoryCouponCard({ coupon, bookmakers, onEdit, onDelete }) {
 }
 
 // ======== STATS TAB ========
-function StatsTab({ stats, statsTimeRange, setStatsTimeRange, coupons }) {
+function StatsTab({ stats, statsTimeRange, setStatsTimeRange, coupons, sports }) {
   const podium = useMemo(() => calculateSportsPodium(stats.filtered), [stats.filtered]);
   const balanceData = useMemo(() => prepareBalanceChart(stats.filtered), [stats.filtered]);
   const monthlyData = useMemo(() => prepareProfitByMonthChart(stats.filtered), [stats.filtered]);
@@ -1081,6 +1267,9 @@ function StatsTab({ stats, statsTimeRange, setStatsTimeRange, coupons }) {
   const avgWonOdds = useMemo(() => getAvgWonOdds(stats.filtered), [stats.filtered]);
   const maxWonOdds = useMemo(() => getMaxWonOdds(stats.filtered), [stats.filtered]);
   const maxWinPLN = useMemo(() => getMaxWinPLN(stats.filtered), [stats.filtered]);
+  const sportMap = useMemo(() => {
+    return new Map((sports || []).map(s => [s.name, s]));
+  }, [sports]);
 
   // Bookmaker stats
   const bookmakerStats = useMemo(() => {
@@ -1191,14 +1380,20 @@ function StatsTab({ stats, statsTimeRange, setStatsTimeRange, coupons }) {
         <div className="glass-card" style={{ borderRadius: 20, padding: '20px 16px' }}>
           <h3 style={{ fontSize: 10, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.1em', color: '#64748b', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 6 }}><IconTrophy size={14} style={{ color: '#facc15' }}/> Ranking dyscyplin</h3>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            {podium.map((sport, i) => (
+            {podium.map((sport, i) => {
+              const sportDetails = sportMap.get(sport.name);
+              const emoji = getSportEmoji(sportDetails);
+              return (
               <div key={sport.name} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                 <div className={i === 0 ? 'medal-gold' : i === 1 ? 'medal-silver' : i === 2 ? 'medal-bronze' : ''} style={{ width: 32, height: 32, borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900, fontSize: 11, ...(i > 2 ? { background: 'rgba(255,255,255,0.05)', color: '#64748b' } : {}) }}>
                   {i + 1}
                 </div>
                 <div style={{ flex: 1 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 4 }}>
-                    <span style={{ fontWeight: 800, fontSize: 12 }}>{sport.name}</span>
+                    <span style={{ fontWeight: 800, fontSize: 12, display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <span style={{ fontSize: 14 }}>{emoji}</span>
+                      {sport.name}
+                    </span>
                     <span style={{ fontSize: 9, color: '#64748b', fontWeight: 800 }}>{sport.winRate}% SR</span>
                   </div>
                   <div style={{ height: 4, width: '100%', background: 'rgba(255,255,255,0.04)', borderRadius: 999, overflow: 'hidden' }}>
@@ -1210,7 +1405,8 @@ function StatsTab({ stats, statsTimeRange, setStatsTimeRange, coupons }) {
                   </div>
                 </div>
               </div>
-            ))}
+            );
+            })}
           </div>
         </div>
       )}
@@ -1301,14 +1497,20 @@ function StatsTab({ stats, statsTimeRange, setStatsTimeRange, coupons }) {
 function SettingsTab({ bookmakers, sports, coupons, user, db, onSaveBookmakers, onSaveSports, onLogout }) {
   const [newBkName, setNewBkName] = useState('');
   const [newBkTax, setNewBkTax] = useState('12');
+  const [newBkLogo, setNewBkLogo] = useState('');
+  const [newBkColor, setNewBkColor] = useState(BOOKMAKER_COLORS[0]);
   const [editingBk, setEditingBk] = useState(null);
   const [editBkName, setEditBkName] = useState('');
   const [editBkTax, setEditBkTax] = useState('');
+  const [editBkLogo, setEditBkLogo] = useState('');
+  const [editBkColor, setEditBkColor] = useState(BOOKMAKER_COLORS[0]);
   const [savingBk, setSavingBk] = useState(false);
 
   const [newSportName, setNewSportName] = useState('');
+  const [newSportEmoji, setNewSportEmoji] = useState('⚽️');
   const [editingSport, setEditingSport] = useState(null);
   const [editSportName, setEditSportName] = useState('');
+  const [editSportEmoji, setEditSportEmoji] = useState('⚽️');
   const [savingSport, setSavingSport] = useState(false);
 
   const [showExport, setShowExport] = useState(false);
@@ -1316,15 +1518,21 @@ function SettingsTab({ bookmakers, sports, coupons, user, db, onSaveBookmakers, 
   const [exportText, setExportText] = useState('');
   const [importText, setImportText] = useState('');
   const [importStatus, setImportStatus] = useState('');
+  const nextBookmakerColor = BOOKMAKER_COLORS[bookmakers.length % BOOKMAKER_COLORS.length];
 
   const addBookmaker = async () => {
     if (!newBkName.trim() || savingBk) return;
     setSavingBk(true);
     try {
-      const list = [...bookmakers, { id: Date.now().toString(), name: newBkName.trim(), tax: Number(newBkTax) || 0, count: 0 }];
+      const logoText = normalizeLogoText(newBkLogo || newBkName);
+      const color = newBkColor || nextBookmakerColor;
+      const list = [...bookmakers, { id: Date.now().toString(), name: newBkName.trim(), tax: Number(newBkTax) || 0, count: 0, logoText, color }];
       await onSaveBookmakers(list);
       setNewBkName('');
       setNewBkTax('12');
+      setNewBkLogo('');
+      setNewBkColor(BOOKMAKER_COLORS[(bookmakers.length + 1) % BOOKMAKER_COLORS.length]);
+      triggerFeedback('success');
     } catch (err) {
       console.error('Error saving bookmaker:', err);
       const d = getFirebaseErrorDetails(err, 'firestore');
@@ -1338,6 +1546,7 @@ function SettingsTab({ bookmakers, sports, coupons, user, db, onSaveBookmakers, 
     if (!window.confirm('Na pewno usunąć bukmachera?')) return;
     try {
       await onSaveBookmakers(bookmakers.filter(b => b.id !== id));
+      triggerFeedback('warn');
     } catch (err) {
       console.error('Error deleting bookmaker:', err);
       const d = getFirebaseErrorDetails(err, 'firestore');
@@ -1346,18 +1555,22 @@ function SettingsTab({ bookmakers, sports, coupons, user, db, onSaveBookmakers, 
   };
 
   const startEditBk = (bk) => {
+    triggerFeedback('tap');
     setEditingBk(bk.id);
     setEditBkName(bk.name);
     setEditBkTax(String(bk.tax));
+    setEditBkLogo(bk.logoText || bk.name.substring(0, 2).toUpperCase());
+    setEditBkColor(bk.color || nextBookmakerColor);
   };
 
   const saveEditBk = async () => {
     if (savingBk) return;
     setSavingBk(true);
     try {
-      const list = bookmakers.map(b => b.id === editingBk ? { ...b, name: editBkName.trim(), tax: Number(editBkTax) || 0 } : b);
+      const list = bookmakers.map(b => b.id === editingBk ? { ...b, name: editBkName.trim(), tax: Number(editBkTax) || 0, logoText: normalizeLogoText(editBkLogo || editBkName), color: editBkColor || b.color || nextBookmakerColor } : b);
       await onSaveBookmakers(list);
       setEditingBk(null);
+      triggerFeedback('success');
     } catch (err) {
       console.error('Error updating bookmaker:', err);
       const d = getFirebaseErrorDetails(err, 'firestore');
@@ -1372,9 +1585,11 @@ function SettingsTab({ bookmakers, sports, coupons, user, db, onSaveBookmakers, 
     if (!newSportName.trim() || savingSport) return;
     setSavingSport(true);
     try {
-      const list = [...sports, { name: newSportName.trim(), count: 0 }];
+      const list = [...sports, { name: newSportName.trim(), count: 0, emoji: newSportEmoji.trim() || FALLBACK_SPORT_EMOJI }];
       await onSaveSports(list);
       setNewSportName('');
+      setNewSportEmoji('⚽️');
+      triggerFeedback('success');
     } catch (err) {
       console.error('Error saving sport:', err);
       const d = getFirebaseErrorDetails(err, 'firestore');
@@ -1388,6 +1603,7 @@ function SettingsTab({ bookmakers, sports, coupons, user, db, onSaveBookmakers, 
     if (!window.confirm('Na pewno usunąć dyscyplinę?')) return;
     try {
       await onSaveSports(sports.filter(s => s.name !== name));
+      triggerFeedback('warn');
     } catch (err) {
       console.error('Error deleting sport:', err);
       const d = getFirebaseErrorDetails(err, 'firestore');
@@ -1396,17 +1612,20 @@ function SettingsTab({ bookmakers, sports, coupons, user, db, onSaveBookmakers, 
   };
 
   const startEditSport = (sport) => {
+    triggerFeedback('tap');
     setEditingSport(sport.name);
     setEditSportName(sport.name);
+    setEditSportEmoji(sport.emoji || FALLBACK_SPORT_EMOJI);
   };
 
   const saveEditSport = async () => {
     if (savingSport) return;
     setSavingSport(true);
     try {
-      const list = sports.map(s => s.name === editingSport ? { ...s, name: editSportName.trim() } : s);
+      const list = sports.map(s => s.name === editingSport ? { ...s, name: editSportName.trim(), emoji: editSportEmoji.trim() || FALLBACK_SPORT_EMOJI } : s);
       await onSaveSports(list);
       setEditingSport(null);
+      triggerFeedback('success');
     } catch (err) {
       console.error('Error updating sport:', err);
       const d = getFirebaseErrorDetails(err, 'firestore');
@@ -1421,11 +1640,13 @@ function SettingsTab({ bookmakers, sports, coupons, user, db, onSaveBookmakers, 
     setExportText(data);
     setShowExport(true);
     setShowImport(false);
+    triggerFeedback('tap');
   };
 
   const handleCopyExport = () => {
     navigator.clipboard.writeText(exportText).then(() => {
       alert('Skopiowano do schowka!');
+      triggerFeedback('success');
     }).catch(() => {
       // Fallback: select all text in textarea
       const ta = document.getElementById('export-textarea');
@@ -1436,6 +1657,7 @@ function SettingsTab({ bookmakers, sports, coupons, user, db, onSaveBookmakers, 
   const handleImport = async () => {
     if (!importText.trim()) {
       setImportStatus('Wklej dane JSON do pola tekstowego.');
+      triggerFeedback('warn');
       return;
     }
     try {
@@ -1464,9 +1686,11 @@ function SettingsTab({ bookmakers, sports, coupons, user, db, onSaveBookmakers, 
 
       setImportStatus('Dane zaimportowane pomyślnie!' + (data.coupons ? ` (${data.coupons.length} kuponów)` : ''));
       setImportText('');
+      triggerFeedback('success');
     } catch (err) {
       console.error('Import error:', err);
       setImportStatus('Błąd: nieprawidłowy format JSON. Sprawdź dane i spróbuj ponownie.');
+      triggerFeedback('warn');
     }
   };
 
@@ -1501,18 +1725,20 @@ function SettingsTab({ bookmakers, sports, coupons, user, db, onSaveBookmakers, 
           {bookmakers.map(bk => (
             <div key={bk.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 12px', background: 'rgba(0,0,0,0.2)', borderRadius: 12, border: '1px solid rgba(255,255,255,0.03)' }}>
               {editingBk === bk.id ? (
-                <div style={{ display: 'flex', gap: 6, flex: 1, alignItems: 'center' }}>
-                  <input type="text" value={editBkName} onChange={e => setEditBkName(e.target.value)} className="glass-input" style={{ flex: 1, padding: '6px 10px', borderRadius: 8, fontSize: 11 }} />
+                <div style={{ display: 'flex', gap: 6, flex: 1, alignItems: 'center', flexWrap: 'wrap' }}>
+                  <input type="text" value={editBkName} onChange={e => setEditBkName(e.target.value)} className="glass-input" style={{ flex: 1, minWidth: 140, padding: '6px 10px', borderRadius: 8, fontSize: 11 }} />
+                  <input type="text" value={editBkLogo} onChange={e => setEditBkLogo(e.target.value)} className="glass-input" style={{ width: 58, padding: '6px 8px', borderRadius: 8, fontSize: 11, textAlign: 'center' }} placeholder="Logo" />
                   <input type="number" value={editBkTax} onChange={e => setEditBkTax(e.target.value)} className="glass-input" style={{ width: 50, padding: '6px 8px', borderRadius: 8, fontSize: 11, textAlign: 'center' }} />
                   <span style={{ fontSize: 9, color: '#64748b' }}>%</span>
+                  <input type="color" value={editBkColor} onChange={e => setEditBkColor(e.target.value)} style={{ width: 36, height: 28, borderRadius: 8, border: '1px solid rgba(255,255,255,0.12)', background: 'transparent' }} aria-label="Kolor bukmachera" />
                   <button onClick={saveEditBk} disabled={savingBk} className="btn-press" style={{ background: 'rgba(74,222,128,0.15)', border: 'none', borderRadius: 8, padding: 6, cursor: 'pointer', color: '#4ade80' }}><IconCheck size={14}/></button>
-                  <button onClick={() => setEditingBk(null)} className="btn-press" style={{ background: 'rgba(248,113,113,0.15)', border: 'none', borderRadius: 8, padding: 6, cursor: 'pointer', color: '#f87171' }}><IconX size={14}/></button>
+                  <button onClick={() => { triggerFeedback('tap'); setEditingBk(null); }} className="btn-press" style={{ background: 'rgba(248,113,113,0.15)', border: 'none', borderRadius: 8, padding: 6, cursor: 'pointer', color: '#f87171' }}><IconX size={14}/></button>
                 </div>
               ) : (
                 <>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                    <div style={{ width: 32, height: 32, borderRadius: 8, background: 'rgba(59,130,246,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontWeight: 900, color: '#60a5fa' }}>
-                      {bk.name.substring(0, 2).toUpperCase()}
+                    <div style={{ width: 32, height: 32, borderRadius: 8, background: hexToRgba(bk.color || FALLBACK_BOOKMAKER_COLOR, 0.2), display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontWeight: 900, color: bk.color || FALLBACK_BOOKMAKER_COLOR, border: `1px solid ${hexToRgba(bk.color || FALLBACK_BOOKMAKER_COLOR, 0.4)}` }}>
+                      {getBookmakerLogo(bk)}
                     </div>
                     <div>
                       <p style={{ fontWeight: 800, fontSize: 12 }}>{bk.name}</p>
@@ -1532,9 +1758,11 @@ function SettingsTab({ bookmakers, sports, coupons, user, db, onSaveBookmakers, 
         {/* Add new bookmaker */}
         <div style={{ padding: '12px', border: '1px dashed rgba(255,255,255,0.08)', borderRadius: 12 }}>
           <p style={{ fontSize: 9, fontWeight: 800, textTransform: 'uppercase', color: '#475569', marginBottom: 8 }}>Dodaj bukmachera</p>
-          <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+          <div className="settings-add-row" style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
             <input type="text" placeholder="Nazwa" value={newBkName} onChange={e => setNewBkName(e.target.value)} className="glass-input" style={{ flex: 1, padding: '8px 10px', borderRadius: 10, fontSize: 11 }} />
+            <input type="text" placeholder="Logo" value={newBkLogo} onChange={e => setNewBkLogo(e.target.value)} className="glass-input" style={{ width: 60, padding: '8px 8px', borderRadius: 10, fontSize: 11, textAlign: 'center' }} />
             <input type="number" placeholder="%" value={newBkTax} onChange={e => setNewBkTax(e.target.value)} className="glass-input" style={{ width: 55, padding: '8px 8px', borderRadius: 10, fontSize: 11, textAlign: 'center' }} />
+            <input type="color" value={newBkColor || nextBookmakerColor} onChange={e => setNewBkColor(e.target.value)} style={{ width: 40, height: 30, borderRadius: 10, border: '1px solid rgba(255,255,255,0.12)', background: 'transparent' }} aria-label="Kolor bukmachera" />
             <button onClick={addBookmaker} disabled={savingBk} className="btn-press" style={{ background: 'linear-gradient(135deg, #3b82f6, #6366f1)', border: 'none', borderRadius: 10, padding: '8px 14px', cursor: 'pointer', color: 'white', fontWeight: 800, fontSize: 10, whiteSpace: 'nowrap', opacity: savingBk ? 0.6 : 1 }}>
               {savingBk ? '...' : 'Dodaj'}
             </button>
@@ -1550,16 +1778,17 @@ function SettingsTab({ bookmakers, sports, coupons, user, db, onSaveBookmakers, 
           {sports.map(sp => (
             <div key={sp.name} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 12px', background: 'rgba(0,0,0,0.2)', borderRadius: 12, border: '1px solid rgba(255,255,255,0.03)' }}>
               {editingSport === sp.name ? (
-                <div style={{ display: 'flex', gap: 6, flex: 1, alignItems: 'center' }}>
-                  <input type="text" value={editSportName} onChange={e => setEditSportName(e.target.value)} className="glass-input" style={{ flex: 1, padding: '6px 10px', borderRadius: 8, fontSize: 11 }} />
+                <div style={{ display: 'flex', gap: 6, flex: 1, alignItems: 'center', flexWrap: 'wrap' }}>
+                  <input type="text" value={editSportEmoji} onChange={e => setEditSportEmoji(e.target.value)} className="glass-input" style={{ width: 54, padding: '6px 8px', borderRadius: 8, fontSize: 12, textAlign: 'center' }} />
+                  <input type="text" value={editSportName} onChange={e => setEditSportName(e.target.value)} className="glass-input" style={{ flex: 1, minWidth: 140, padding: '6px 10px', borderRadius: 8, fontSize: 11 }} />
                   <button onClick={saveEditSport} disabled={savingSport} className="btn-press" style={{ background: 'rgba(74,222,128,0.15)', border: 'none', borderRadius: 8, padding: 6, cursor: 'pointer', color: '#4ade80' }}><IconCheck size={14}/></button>
-                  <button onClick={() => setEditingSport(null)} className="btn-press" style={{ background: 'rgba(248,113,113,0.15)', border: 'none', borderRadius: 8, padding: 6, cursor: 'pointer', color: '#f87171' }}><IconX size={14}/></button>
+                  <button onClick={() => { triggerFeedback('tap'); setEditingSport(null); }} className="btn-press" style={{ background: 'rgba(248,113,113,0.15)', border: 'none', borderRadius: 8, padding: 6, cursor: 'pointer', color: '#f87171' }}><IconX size={14}/></button>
                 </div>
               ) : (
                 <>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                    <div style={{ width: 32, height: 32, borderRadius: 8, background: 'rgba(139,92,246,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12 }}>
-                      ⚽
+                    <div style={{ width: 32, height: 32, borderRadius: 8, background: 'rgba(139,92,246,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14 }}>
+                      {getSportEmoji(sp)}
                     </div>
                     <p style={{ fontWeight: 800, fontSize: 12 }}>{sp.name}</p>
                   </div>
@@ -1576,7 +1805,8 @@ function SettingsTab({ bookmakers, sports, coupons, user, db, onSaveBookmakers, 
         {/* Add new sport */}
         <div style={{ padding: '12px', border: '1px dashed rgba(255,255,255,0.08)', borderRadius: 12 }}>
           <p style={{ fontSize: 9, fontWeight: 800, textTransform: 'uppercase', color: '#475569', marginBottom: 8 }}>Dodaj dyscypline</p>
-          <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+          <div className="settings-add-row" style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+            <input type="text" placeholder="Emoji" value={newSportEmoji} onChange={e => setNewSportEmoji(e.target.value)} className="glass-input" style={{ width: 60, padding: '8px 8px', borderRadius: 10, fontSize: 12, textAlign: 'center' }} />
             <input type="text" placeholder="Nazwa dyscypliny" value={newSportName} onChange={e => setNewSportName(e.target.value)} className="glass-input" style={{ flex: 1, padding: '8px 10px', borderRadius: 10, fontSize: 11 }} />
             <button onClick={addSport} disabled={savingSport} className="btn-press" style={{ background: 'linear-gradient(135deg, #8b5cf6, #6366f1)', border: 'none', borderRadius: 10, padding: '8px 14px', cursor: 'pointer', color: 'white', fontWeight: 800, fontSize: 10, whiteSpace: 'nowrap', opacity: savingSport ? 0.6 : 1 }}>
               {savingSport ? '...' : 'Dodaj'}
@@ -1602,7 +1832,7 @@ function SettingsTab({ bookmakers, sports, coupons, user, db, onSaveBookmakers, 
           </div>
         )}
 
-        <button onClick={() => { setShowImport(!showImport); setShowExport(false); setImportStatus(''); }} className="btn-press" style={{ width: '100%', padding: '14px', background: 'rgba(99,102,241,0.15)', border: '1px solid rgba(99,102,241,0.3)', borderRadius: 14, cursor: 'pointer', color: '#a78bfa', fontWeight: 800, fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.05em', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+        <button onClick={() => { triggerFeedback('tap'); setShowImport(!showImport); setShowExport(false); setImportStatus(''); }} className="btn-press" style={{ width: '100%', padding: '14px', background: 'rgba(99,102,241,0.15)', border: '1px solid rgba(99,102,241,0.3)', borderRadius: 14, cursor: 'pointer', color: '#a78bfa', fontWeight: 800, fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.05em', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
           <IconUpload size={16} /> Importuj dane (tekst)
         </button>
 
@@ -1628,6 +1858,9 @@ function CouponModal({ mode, coupon, onClose, onSave, bookmakers, sports }) {
   const [stake, setStake] = useState(coupon?.stake?.toString() || '');
   const [selectedBookie, setSelectedBookie] = useState(coupon?.bookmaker || bookmakers[0]?.name || '');
   const [selectedSport, setSelectedSport] = useState(coupon?.sport || sports[0]?.name || 'Piłka nożna');
+  const [selectedStatus, setSelectedStatus] = useState(coupon?.status || 'pending');
+  const [selectedDate, setSelectedDate] = useState(coupon?.date ? toDateInputValue(coupon.date) : toDateInputValue(Date.now()));
+  const [payout, setPayout] = useState(coupon?.payout?.toString() || coupon?.stake?.toString() || '');
   const [activeInput, setActiveInput] = useState('odds');
 
   // Lock body scroll when modal is open
@@ -1658,15 +1891,26 @@ function CouponModal({ mode, coupon, onClose, onSave, bookmakers, sports }) {
     if (!odds || !stake || Number(odds) <= 0 || Number(stake) <= 0) return;
     setSubmitting(true);
     try {
-      await onSave({
+      const payload = {
         odds: Number(odds),
         stake: Number(stake),
         bookmaker: selectedBookie,
+        bookmakerId: selectedBk?.id || '',
+        bookmakerLogoText: selectedBk?.logoText || normalizeLogoText(selectedBookie),
+        bookmakerColor: selectedBk?.color || FALLBACK_BOOKMAKER_COLOR,
         sport: selectedSport,
-        status: coupon?.status || 'pending',
         tax: selectedBk?.tax ?? 12,
-        ...(coupon?.date ? { date: coupon.date } : {})
-      });
+        status: mode === 'edit' ? (selectedStatus || coupon?.status || 'pending') : 'pending'
+      };
+      if (mode === 'edit') {
+        payload.date = fromDateInputValue(selectedDate || toDateInputValue(coupon?.date || Date.now()));
+        if (payload.status === 'cashout') {
+          payload.payout = Number(payout || stake || 0);
+        } else if (coupon?.payout != null) {
+          payload.payout = firebase.firestore.FieldValue.delete();
+        }
+      }
+      await onSave(payload);
     } catch (err) {
       console.error('Error saving coupon:', err);
       const d = getFirebaseErrorDetails(err, 'firestore');
@@ -1708,6 +1952,33 @@ function CouponModal({ mode, coupon, onClose, onSave, bookmakers, sports }) {
           )}
         </div>
 
+        {mode === 'edit' && (
+          <div style={{ marginBottom: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <div>
+              <p style={{ fontSize: 9, fontWeight: 800, textTransform: 'uppercase', color: '#64748b', marginBottom: 6 }}>Status</p>
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                {STATUSES.map(s => (
+                  <button key={s.id} onClick={() => setSelectedStatus(s.id)} className={`chip ${selectedStatus === s.id ? 'chip-active' : 'chip-inactive'}`} style={selectedStatus === s.id ? { background: hexToRgba(s.color, 0.2), border: `1px solid ${hexToRgba(s.color, 0.5)}`, color: s.color } : {}}>
+                    {s.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: selectedStatus === 'cashout' ? '1fr 1fr' : '1fr', gap: 10 }}>
+              <div>
+                <p style={{ fontSize: 9, fontWeight: 800, textTransform: 'uppercase', color: '#64748b', marginBottom: 6 }}>Data</p>
+                <input type="date" value={selectedDate} onChange={e => setSelectedDate(e.target.value)} className="glass-input" style={{ width: '100%', padding: '10px 12px', borderRadius: 12, fontSize: 12 }} />
+              </div>
+              {selectedStatus === 'cashout' && (
+                <div>
+                  <p style={{ fontSize: 9, fontWeight: 800, textTransform: 'uppercase', color: '#64748b', marginBottom: 6 }}>Kwota cashout</p>
+                  <input type="number" value={payout} onChange={e => setPayout(e.target.value)} className="glass-input" style={{ width: '100%', padding: '10px 12px', borderRadius: 12, fontSize: 12 }} />
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* Keypad */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6, marginBottom: 16 }}>
           {[1, 2, 3, 4, 5, 6, 7, 8, 9, '.', 0, 'back'].map(k => (
@@ -1722,7 +1993,15 @@ function CouponModal({ mode, coupon, onClose, onSave, bookmakers, sports }) {
           <p style={{ fontSize: 9, fontWeight: 800, textTransform: 'uppercase', color: '#64748b', marginBottom: 6 }}>Bukmacher</p>
           <div style={{ display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 4 }}>
             {bookmakers.map(b => (
-              <button key={b.id} onClick={() => setSelectedBookie(b.name)} className={`chip ${selectedBookie === b.name ? 'chip-active' : 'chip-inactive'}`}>
+              <button
+                key={b.id}
+                onClick={() => setSelectedBookie(b.name)}
+                className={`chip ${selectedBookie === b.name ? 'chip-active' : 'chip-inactive'}`}
+                style={{ gap: 6, ...(selectedBookie === b.name ? { background: hexToRgba(getBookmakerColor(b), 0.18), border: `1px solid ${hexToRgba(getBookmakerColor(b), 0.5)}`, color: getBookmakerColor(b) } : {}) }}
+              >
+                <span style={{ width: 18, height: 18, borderRadius: 6, background: hexToRgba(getBookmakerColor(b), 0.3), color: getBookmakerColor(b), display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontWeight: 900, border: `1px solid ${hexToRgba(getBookmakerColor(b), 0.5)}` }}>
+                  {getBookmakerLogo(b)}
+                </span>
                 {b.name}
               </button>
             ))}
@@ -1734,7 +2013,8 @@ function CouponModal({ mode, coupon, onClose, onSave, bookmakers, sports }) {
           <p style={{ fontSize: 9, fontWeight: 800, textTransform: 'uppercase', color: '#64748b', marginBottom: 6 }}>Dyscyplina</p>
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
             {sports.map(s => (
-              <button key={s.name} onClick={() => setSelectedSport(s.name)} className={`chip ${selectedSport === s.name ? 'chip-active' : 'chip-inactive'}`}>
+              <button key={s.name} onClick={() => setSelectedSport(s.name)} className={`chip ${selectedSport === s.name ? 'chip-active' : 'chip-inactive'}`} style={{ gap: 6 }}>
+                <span style={{ fontSize: 12 }}>{getSportEmoji(s)}</span>
                 {s.name}
               </button>
             ))}
